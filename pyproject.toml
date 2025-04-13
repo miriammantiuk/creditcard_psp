@@ -1,0 +1,48 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "creditcard_psp"
+version = "0.0.1"
+description = "Erstellen eines Prognosemodells des Kreditkartenzahlungsverkehr f\u00fcr Online-Eink\u00e4ufe"
+authors = [
+  { name = "Miriam Mantiuk" },
+]
+
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    
+]
+dependencies = [
+    "ipython",
+    "jupyterlab",
+    "loguru",
+    "matplotlib",
+    "mkdocs",
+    "notebook",
+    "numpy",
+    "pandas",
+    "pip",
+    "python-dotenv",
+    "ruff",
+    "scikit-learn",
+    "tqdm",
+    "typer",
+]
+requires-python = "==3.11.4"
+
+
+[tool.ruff]
+line-length = 99
+src = ["creditcard_psp"]
+include = ["pyproject.toml", "creditcard_psp/**/*.py"]
+
+[tool.ruff.lint]
+extend-select = ["I"]  # Add import sorting
+
+[tool.ruff.lint.isort]
+known-first-party = ["creditcard_psp"]
+force-sort-within-sections = true
+
