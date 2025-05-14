@@ -89,7 +89,7 @@ def encode_and_scale(
         - 'amount_log'
         - 'amount_scaled'
     """
-    # 1) Fit OneHotEncoder
+    # Fit OneHotEncoder
     ohe = OneHotEncoder(
         sparse_output=False,
         drop='first' if drop_first else None,
@@ -98,17 +98,17 @@ def encode_and_scale(
     )
     arr = ohe.fit_transform(df[categorical_cols])
 
-    # 2) Build DataFrame of encoded features
+    # Build DataFrame of encoded features
     feature_names = ohe.get_feature_names_out(categorical_cols)
     df_ohe = pd.DataFrame(arr, columns=feature_names, index=df.index)
 
-    # 3) Drop original categorical cols & concat the new dummies
+    # Drop original categorical cols & concat the new dummies
     df = pd.concat([df.drop(columns=categorical_cols), df_ohe], axis=1)
 
-    # 4) Log‑transform the amount
+    # Log‑transform the amount
     df['amount_log'] = np.log1p(df[amount_col])
 
-    # 5) Standard‑scale the log amount
+    # Standard‑scale the log amount
     scaler = StandardScaler()
     df['amount_scaled'] = scaler.fit_transform(df[['amount_log']])
 

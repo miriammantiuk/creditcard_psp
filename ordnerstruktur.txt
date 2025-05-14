@@ -1,0 +1,73 @@
+Auflistung der Ordnerpfade für Volume Local Disk
+Volumeseriennummer : E83E-CB80
+C:.
+¦   .env
+¦   .gitignore
+¦   Makefile
+¦   ordnerstruktur.txt
+¦   pyproject.toml
+¦   README.md
+¦   
++---creditcard_psp
+¦   ¦   config.py
+¦   ¦   dataset.py
+¦   ¦   features.py
+¦   ¦   plots.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---modeling
+¦           predict.py
+¦           train.py
+¦           __init__.py
+¦           
++---data
+¦   +---external
+¦   ¦       .gitkeep
+¦   ¦       
+¦   +---interim
+¦   ¦       .gitkeep
+¦   ¦       
+¦   +---processed
+¦   ¦       .gitkeep
+¦   ¦       
+¦   +---raw
+¦           .gitkeep
+¦           PSP_Jan_Feb_2019.xlsx
+¦           PSP_Servicegebuehren.xlsx
+¦           
++---docs
+¦   ¦   .gitkeep
+¦   ¦   mkdocs.yml
+¦   ¦   README.md
+¦   ¦   
+¦   +---docs
+¦           getting-started.md
+¦           index.md
+¦           
++---models
+¦       .gitkeep
+¦       
++---notebooks
+¦   ¦   .gitkeep
+¦   ¦   0.01-mm-data-exploration.ipynb
+¦   ¦   1.01-mm-data-preprocessing.ipynb
+¦   ¦   3.01-mm-baseline-model.ipynb
+¦   ¦   agg_df.pkl
+¦   ¦   
+¦   +---.ipynb_checkpoints
+¦           0.01-mm-data-exploration-checkpoint.ipynb
+¦           1.01-mm-data-preprocessing-checkpoint.ipynb
+¦           3.01-mm-baseline-model-checkpoint.ipynb
+¦           
++---references
+¦       .gitkeep
+¦       
++---reports
+¦   ¦   .gitkeep
+¦   ¦   
+¦   +---figures
+¦           .gitkeep
+¦           
++---tests
+        test_data.py
+        
