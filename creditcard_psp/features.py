@@ -1,12 +1,19 @@
 from pathlib import Path
+from typing import List, Optional, Sequence
 
+import numpy as np
+import pandas as pd
 from loguru import logger
 from tqdm import tqdm
 import typer
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import OneHotEncoder,StandardScaler
-from typing import Sequence
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import (
+    OneHotEncoder,
+    StandardScaler,
+    FunctionTransformer
+)
 
 from creditcard_psp.config import PROCESSED_DATA_DIR
 
@@ -114,18 +121,73 @@ def encode_and_scale(
 
     return df
 
+def make_preprocessor(
+    categorical_cols: List[str],
+    amount_col: str = 'amount',
+    time_col: Optional[str] = None,
+    drop_first: bool = True
+) -> Pipeline:
+    """
+    Build a sklearn Pipeline to preprocess features:
+      - Numeric: median impute, log1p, StandardScaler
+      - Categorical: constant impute, OneHotEncoder
+      - Optional time features via add_time_features
+    """
+    # Numeric pipeline
+    num_pipeline = Pipeline([
+        ('impute', SimpleImputer(strategy='median')),
+        ('log', FunctionTransformer(np.log1p, validate=True)),
+        ('scale', StandardScaler())
+    ])
+
+    # Categorical pipeline
+    cat_pipeline = Pipeline([
+        ('impute', SimpleImputer(strategy='constant', fill_value='missing')),
+        ('ohe', OneHotEncoder(
+            sparse_output=False,
+            drop='first' if drop_first else None,
+            handle_unknown='ignore'
+        ))
+    ])
+
+    # Assemble transformers
+    transformers = [
+        ('num', num_pipeline, [amount_col]),
+        ('cat', cat_pipeline, categorical_cols)
+    ]
+    if time_col:
+        time_pipeline = Pipeline([
+            ('time_feats', FunctionTransformer(lambda df: add_time_features(df, time_col), validate=False))
+        ])
+        transformers.append(('time', time_pipeline, [time_col]))
+
+    preprocessor = ColumnTransformer(transformers=transformers, remainder='passthrough')
+    return Pipeline([('preprocessor', preprocessor)])
+
 @app.command()
 def main(
-    # ---- REPLACE DEFAULT PATHS AS APPROPRIATE ----
     input_path: Path = PROCESSED_DATA_DIR / "dataset.csv",
     output_path: Path = PROCESSED_DATA_DIR / "features.csv",
     # -----------------------------------------
 ):
-    # Extract weekday, hour, minute
-    df = add_time_features(df)
-    
-    # Encoding and Scaling
-    df = encode_and_scale(df)
+    # Load dataset
+    df = pd.read_csv(input_path)
+
+    # Build and apply pipeline
+    preproc = make_preprocessor(
+        categorical_cols=['PSP','card','country'],
+        amount_col='amount',
+        time_col='tmsp'
+    )
+    df_transformed = preproc.fit_transform(df)
+
+    # Convert back to DataFrame with feature names
+    columns = preproc.named_steps['preprocessor'].get_feature_names_out()
+    df_out = pd.DataFrame(df_transformed, columns=columns, index=df.index)
+
+    # Save
+    df_out.to_csv(output_path, index=False)
+    logger.success(f"Features saved to {output_path}")
 
 if __name__ == "__main__":
     app()
