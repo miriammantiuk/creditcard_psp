@@ -100,7 +100,7 @@ def encode_and_scale(
     ohe = OneHotEncoder(
         sparse_output=False,
         drop='first' if drop_first else None,
-        handle_unknown=handle_unknown,
+        handle_unknown='ignore',
         dtype=float
     )
     arr = ohe.fit_transform(df[categorical_cols])
@@ -161,7 +161,7 @@ def make_preprocessor(
         ])
         transformers.append(('time', time_pipeline, [time_col]))
 
-    preprocessor = ColumnTransformer(transformers=transformers, remainder='passthrough')
+    preprocessor = ColumnTransformer(transformers=transformers, remainder='drop')
     return Pipeline([('preprocessor', preprocessor)])
 
 @app.command()

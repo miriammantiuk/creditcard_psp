@@ -13,27 +13,27 @@ app = typer.Typer()
 
 def load_transactions(file_path: Path) -> pd.DataFrame:
     """
-    Load transactions from an Excel file into a pandas DataFrame.
+    Load data from an Excel file into a pandas DataFrame.
 
     Parameters
     ----------
     file_path : Path
-        Path to the Excel file containing transaction data.
+        Path to the Excel file.
 
     Returns
     -------
     pd.DataFrame
         DataFrame with the loaded transaction data.
     """
-    logger.info(f"Loading transactions from {file_path}")
-    df = pd.read_excel(file_path)
+    logger.info(f"Loading data from {file_path}")
+    df = pd.read_excel(file_path, index_col=0)
     return df
 
 def assign_transaction_ids(
     df: pd.DataFrame,
-    time_col: str = 'tmsp',
-    group_cols: List[str] = ['country', 'amount'],
-    gap: pd.Timedelta = pd.Timedelta(minutes=1)
+    time_col: str = "tmsp",
+    country_col: str = "country",
+    amount_col: str = "amount",
 ) -> pd.DataFrame:
     """
     Assign a transaction ID to each row by grouping rows with the same values in group_cols
@@ -59,30 +59,30 @@ def assign_transaction_ids(
         - 'transaction_success'
         - 'attempt_number'
     """
-    # Parse timestamp and sort
-    df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
-    df = df.sort_values(group_cols + [time_col])
+    
+    df = df.copy()
+    df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
 
-    # Compute time difference within each group
-    df['time_diff'] = df.groupby(group_cols)[time_col].diff().abs()
+    # exact "same minute": floor timestamp to minute
+    df["minute_bucket"] = df[time_col].dt.floor("T")
 
-    # Flag new transaction when gap is exceeded or at the start
-    df['new_transaction'] = df['time_diff'].isna() | (df['time_diff'] > gap)
+    # global transaction id per (country, amount, minute)
+    df["transaction_id"] = (
+        df.groupby([country_col, amount_col, "minute_bucket"], sort=False)
+          .ngroup()
+    )
 
-    # Cumulative sum yields the transaction ID
-    df['transaction_id'] = df.groupby(group_cols)['new_transaction'].cumsum()
+    # attempt count within transaction
+    df["attempt_number"] = df.groupby("transaction_id").cumcount() + 1
 
-    # Transaction-level success flag
-    tx_key = group_cols + ['transaction_id']
-    df['transaction_success'] = df.groupby(tx_key)['success'].transform('max')
+    # transaction-level success (if available)
+    if "success" in df.columns:
+        df["transaction_success"] = df.groupby("transaction_id")["success"].transform("max")
 
-    # Attempt number within each transaction
-    df['attempt_number'] = df.groupby(tx_key).cumcount() + 1
-
-    # Clean up temporary columns
-    df.drop(columns=['time_diff', 'new_transaction'], inplace=True)
-
+    # cleanup
+    df.drop(columns=["minute_bucket"], inplace=True)
     return df
+
 
 def merge_service_fees(
     df: pd.DataFrame,
@@ -139,10 +139,10 @@ def split_train_test(
     """
     Split a DataFrame into train and test sets.
 
-    If `time_col` is provided, does a chronologic split:
-      - Sorts by `time_col`, then takes the last `test_size` fraction as test set.
-
-    Otherwise does a randomized split (optionally stratified by target).
+    If `time_col` is given:
+      - With 'transaction_id': group-aware chronological split (no leakage across attempts).
+      - Without: row-wise chronological split.
+    Else: random split (optionally stratified).
 
     Parameters
     ----------
@@ -164,27 +164,33 @@ def split_train_test(
     X_train, X_test, y_train, y_test : Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]
     """
     if time_col:
-        # ensure datetime
-        df = df.sort_values(time_col)
-        n = len(df)
-        split_at = int((1 - test_size) * n)
-        train = df.iloc[:split_at]
-        test  = df.iloc[split_at:]
-        X_train = train.drop(columns=[target_col])
-        y_train = train[target_col]
-        X_test  = test.drop(columns=[target_col])
-        y_test  = test[target_col]
-    else:
-        strat = df[target_col] if stratify else None
-        X = df.drop(columns=[target_col])
-        y = df[target_col]
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y,
-            test_size=test_size,
-            random_state=random_state,
-            stratify=strat
+        if time_col not in df.columns:
+            raise KeyError(f"'{time_col}' not in columns for chronological split.")
+        df = df.copy()
+        df[time_col] = pd.to_datetime(df[time_col], errors="coerce")
+
+        if "transaction_id" in df.columns:
+            tx = df.groupby("transaction_id")[time_col].max().sort_values()
+            k = int((1 - test_size) * len(tx))
+            train_ids = set(tx.index[:k])
+            train = df[df["transaction_id"].isin(train_ids)]
+            test  = df[~df["transaction_id"].isin(train_ids)]
+        else:
+            df = df.sort_values(time_col)
+            k = int((1 - test_size) * len(df))
+            train, test = df.iloc[:k], df.iloc[k:]
+
+        return (
+            train.drop(columns=[target_col]),
+            test.drop(columns=[target_col]),
+            train[target_col],
+            test[target_col],
         )
-    return X_train, X_test, y_train, y_test
+
+    # Random split
+    X, y = df.drop(columns=[target_col]), df[target_col]
+    strat = y if stratify else None
+    return train_test_split(X, y, test_size=test_size, random_state=random_state, stratify=strat)
 
 @app.command()
 def main(
@@ -200,22 +206,20 @@ def main(
 
     # Merge service fees
     df = merge_service_fees(df, fee_path)
+    
+    # Save processed Dataset
+    df.to_csv(output_path, index=False)
+    logger.success(f"Speichere das verarbeitete Dataset {output_path}")
 
     # Chronologic split (e.g.  Timestamp)
     X_tr, X_te, y_tr, y_te = split_train_test(
-        df=agg_df,
-        target_col='transaction_success',
-        test_size=0.25,
-        time_col='tmsp_last'    
+        df=df,
+        target_col=target_col,
+        test_size=test_size,   
+        time_col='tmsp',       
+        stratify=False
     )
 
-    # random, stratify split
-    X_tr2, X_te2, y_tr2, y_te2 = split_train_test(
-        df=agg_df,
-        target_col='transaction_success',
-        test_size=0.2,
-        stratify=True
-)
 
     logger.success("Processing dataset complete.")
 
