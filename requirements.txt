@@ -1,0 +1,13 @@
+pandas
+numpy
+scikit-learn>=1.3
+typer
+loguru
+tqdm
+joblib
+openpyxl
+shap
+xgboost
+streamlit
+pyarrow
+ipython
