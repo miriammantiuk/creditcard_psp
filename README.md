@@ -85,10 +85,11 @@ python -m creditcard_psp.modeling.predict --input data/sample_input.csv --out pr
 The model computes a cost-adjusted score per PSP:
 
 ```python
-score = - alpha * expected_cost + (1 - alpha) * expected_success
+score = P - alpha * expected_cost 
 ```
 
 - `alpha ∈ [0,1]` controls the weight between cost vs. success.
+- Score is calculated in the Dashboard in app.py
 - PSP metadata & fees are loaded from `dashboard_data/psps.json` and e.g. `data/raw/PSP_Servicegebuehren.xlsx`.
 
 ---
