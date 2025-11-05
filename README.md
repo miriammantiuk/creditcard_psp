@@ -3,10 +3,107 @@
 <a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
+# CreditCard PSP Routing – Machine Learning Pipeline
 
-Erstellen eines Prognosemodells des Kreditkartenzahlungsverkehr für Online-Einkäufe
+This repository implements a **Payment Service Provider (PSP) routing model** to optimize transaction success rates and processing costs.  
+It follows the **CRISP-DM** framework and uses a modular Cookiecutter structure for reproducibility and deployment.
 
-## Project Organization
+---
+
+## 🧠 Project Overview
+
+The model predicts PSP success probabilities and expected fees per transaction, then computes a **business score** balancing success vs. cost using a configurable `alpha` parameter.
+
+**Core features:**
+- Transaction preprocessing & feature engineering (`creditcard_psp/features.py`)
+- Model training & calibration (LogReg, RF, XGBoost)
+- Evaluation (ROC, PR-Curves, Gain Chart, SHAP)
+- Dashboard bundle for real-time routing
+- Makefile-based automation
+
+---
+
+## ⚙️ Setup
+
+### Requirements
+- **Python 3.11** (recommended)
+- pip / pipx
+- optional: `make`
+
+### Installation
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+---
+
+## 🚀 Quickstart
+
+### 1️⃣ Train Models
+```bash
+make train
+```
+Trains and calibrates all models, storing them in `models/`.
+
+### 2️⃣ Evaluate
+```bash
+make evaluate
+```
+Generates reports, calibration plots, and SHAP visualizations in `reports/`.
+
+### 3️⃣ Bundle for Dashboard
+```bash
+make bundle
+```
+Exports all required artifacts into `dashboard_data/`:
+- `psp_router_model.joblib`
+- `model_raw.joblib`
+- `df.parquet`, `X_te.parquet`
+- `psps.json`, `P_matrix.npy`
+
+### 4️⃣ Predict (inference)
+```bash
+make predict
+```
+Performs scoring using the saved model bundle.
+
+Without `make`:
+```bash
+python -m creditcard_psp.modeling.train
+python -m creditcard_psp.modeling.predict --input data/sample_input.csv --out predictions.csv
+```
+
+---
+
+## 📊 Business Score Formula
+
+The model computes a cost-adjusted score per PSP:
+
+```python
+score = - alpha * expected_cost + (1 - alpha) * expected_success
+```
+
+- `alpha ∈ [0,1]` controls the weight between cost vs. success.
+- PSP metadata & fees are loaded from `dashboard_data/psps.json` and e.g. `data/raw/PSP_Servicegebuehren.xlsx`.
+
+---
+
+## 🧪 Testing
+
+Install dev dependencies and run smoke tests:
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 ├── LICENSE            <- Open-source license if one is chosen
@@ -57,5 +154,15 @@ Erstellen eines Prognosemodells des Kreditkartenzahlungsverkehr für Online-Eink
     └── plots.py                <- Code to create visualizations
 ```
 
---------
+---
 
+## 🔒 Reproducibility
+- Python 3.11
+- Pinned dependencies in `requirements.txt`
+- Metrics saved in `reports/summary_metrics.csv`
+- Artifacts bundled in `dashboard_data/`
+
+---
+
+## 🧾 License
+MIT License © 2025 Miriam Mantiuk
