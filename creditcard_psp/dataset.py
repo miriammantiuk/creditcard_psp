@@ -62,16 +62,12 @@ def assign_transaction_ids(
     # Attempt number within transaction (after time-based sorting)
     df["attempt_number"] = df.groupby("transaction_id").cumcount() + 1
 
-    # Transaction-level success flag if available
-#     if "success" in df.columns:
-#         df["transaction_success"] = df.groupby("transaction_id")["success"].transform("max")
-
     if keep_only_first:
         df = df[df["attempt_number"] == 1].copy()
         if drop_attempt_number:
             df.drop(columns=["attempt_number"], inplace=True)
             
-        # Safety: genau eine Zeile je transaction_id
+        # Just one row per transaction_id
         assert df["transaction_id"].is_unique, "Mehrere Zeilen pro transaction_id nach dem Filtern!"
 
 

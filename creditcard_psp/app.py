@@ -16,14 +16,14 @@ from sklearn.pipeline import Pipeline
 
 from creditcard_psp.features import add_time_features
 
-# Legacy-Aliases für Unpickling alter Modelle
+# Legacy aliases for unpacking old models
 __main__.add_time_features = add_time_features
-__main__.time_feat_transform = add_time_features  # falls das alte Artefakt diesen Namen erwartet
+__main__.time_feat_transform = add_time_features  
 
 from creditcard_psp.config import DASHBOARD_DIR, RAW_DATA_DIR
  
 
-# -------- Laden (einfach & robust) --------
+# Load
 
 @st.cache_resource
 def load_model(p: Path):
@@ -47,7 +47,7 @@ def load_any(p: Path):
     except Exception:
         return None
 
-# hübsche Namen (Fallback, wenn kein meta.json)
+# pretty names (fallback if no meta.json))
 def _to_display(n: str) -> str:
     n = str(n)
     if "__" in n:                      # 'num__amount' -> 'amount'
@@ -58,7 +58,7 @@ def _to_display(n: str) -> str:
             n = f"{parts[0]}={parts[1]}"
     return n
 
-# Artefakte laden
+# Load artefacts
 model_raw = load_model(DASHBOARD_DIR / "model_raw.joblib")
 X_te      = load_any(DASHBOARD_DIR / "X_te.parquet")
 P         = load_any(DASHBOARD_DIR / "P_matrix.npy")
@@ -66,7 +66,7 @@ exp_cost  = load_any(DASHBOARD_DIR / "exp_cost_matrix.npy")
 psps      = load_any(DASHBOARD_DIR / "psps.json")
 meta      = load_any(DASHBOARD_DIR / "meta.json") or {}
 
-# Nach dem Laden:
+
 if any(x is None for x in [model_raw, X_te, P, exp_cost, psps]):
     st.error("Artefakte unvollständig: erwartet model_raw.joblib, X_te.parquet, P_matrix.npy, exp_cost_matrix.npy, psps.json.")
     st.stop()
@@ -76,15 +76,13 @@ if len(X_te) != np.asarray(P).shape[0] or np.asarray(P).shape != np.asarray(exp_
     st.error(f"Shape-Mismatch: len(X_te)={len(X_te)}, P={np.asarray(P).shape}, exp_cost={np.asarray(exp_cost).shape}")
     st.stop()
 
-# -------- Preprocessor / Classifier --------
+# Preprocessor / Classifier 
 if isinstance(model_raw, Pipeline) and "classifier" in model_raw.named_steps:
-    # Alles vor dem Classifier (z. B. feat -> preprocessor -> selector ...)
     preproc_pipe = model_raw[:-1]
     classifier   = model_raw.named_steps["classifier"]
-    # Für Feature-Namen (falls vorhanden) nutzen wir den ColumnTransformer in der Pipeline
     preprocessor = model_raw.named_steps.get("preprocessor", None)
 else:
-    # Fallback: alte Artefakte ohne Pipeline-Schneiden
+    # Fallback: old artifacts without pipeline cutting
     steps        = getattr(model_raw, "named_steps", {})
     preproc_pipe = None
     preprocessor = steps.get("preprocessor", None)
@@ -94,7 +92,7 @@ def X(df: pd.DataFrame):
     """Transformiere Roh-DF so, wie es der Classifier erwartet (alle Steps außer Classifier)."""
     if preproc_pipe is not None:
         return preproc_pipe.transform(df)
-    # Fallback: explizit feat -> preprocessor, wenn vorhanden
+    # Fallback: explicitly feat -> preprocessor, if available
     s = df.copy()
     feat = steps.get("feat")
     if feat is not None:
@@ -103,15 +101,7 @@ def X(df: pd.DataFrame):
         s = preprocessor.transform(s)
     return s    
     
-# # -------- Preprocessor / Classifier --------
-# steps = getattr(model_raw, "named_steps", {})
-# preprocessor = steps.get("preprocessor", None)
-# classifier   = steps.get("classifier") or steps.get("clf") or (model_raw if not steps else list(steps.values())[-1])
-
-# def X(df):
-#     return preprocessor.transform(df) if preprocessor is not None else df
-
-# Feature-Namen (aus meta.json, sonst hübsch ableiten)
+# Feature names (from meta.json, otherwise derive nicely)
 feature_names_display = meta.get("feature_names_display")
 if not feature_names_display:
     try:
@@ -120,7 +110,7 @@ if not feature_names_display:
         raw_names = list(X_te.columns)
     feature_names_display = [_to_display(n) for n in raw_names] if raw_names is not None else None
 
-# -------- SHAP (ein Explainer für alles) --------
+# SHAP 
 @st.cache_resource
 def make_explainer(_clf, _bg):
     try:
@@ -131,7 +121,7 @@ def make_explainer(_clf, _bg):
 bg = X(X_te.sample(min(100, len(X_te)), random_state=42))
 explainer = make_explainer(classifier, bg)
 
-# -------- UI --------
+# UI 
 st.set_page_config(layout="wide", page_title="PSP-Routing-Cockpit")
 
 # Sidebar
@@ -166,7 +156,7 @@ c2.metric("Erwartete Kosten/Transaktion", f"{avg_cost:.2f} CHF")
 st.subheader("Verteilung der gewählten PSPs")
 st.bar_chart(psp_distribution)
 
-# Gebühren-Tabelle aus XLSX
+# Fee table from XLSX
 st.subheader("Gebühren je PSP")
 fees_df = pd.read_excel(RAW_DATA_DIR / "PSP_Servicegebuehren.xlsx")
 fees_show = fees_df.rename(columns={
@@ -182,27 +172,20 @@ st.dataframe(
         }
     )
 
-# Globale Modell-Interpretation
+# Global model interpretation
 st.header("Globale Modell-Interpretation")
-# with st.expander("SHAP Summary Plot anzeigen (Übersicht der Feature-Wichtigkeit)"):
-#     sample = X_te.sample(min(500, len(X_te)), random_state=42)
-#     Xs = X(sample)
-#     vals = explainer(Xs)
-#     shap.summary_plot(vals.values, Xs, feature_names=feature_names_display, show=False, plot_size=(6, 4))
-#     st.pyplot(plt.gcf())
 
 with st.expander("SHAP Summary Plot anzeigen (Übersicht der Feature-Wichtigkeit)"):
     sample = X_te.sample(min(500, len(X_te)), random_state=42)
     Xs = X(sample)
     vals = explainer(Xs)
 
-    # <<< kleinere Schrift über rc_context >>>
     with mpl.rc_context({
-        "font.size": 9,        # Basis-Schrift
+        "font.size": 9,       
         "axes.titlesize": 9,
         "axes.labelsize": 9,
-        "xtick.labelsize": 8,  # Achsenticks X
-        "ytick.labelsize": 8,  # Feature-Namen links
+        "xtick.labelsize": 8,  
+        "ytick.labelsize": 8,  
         "legend.fontsize": 8,
     }):
         plt.figure(figsize=(6, 4))
@@ -214,7 +197,6 @@ with st.expander("SHAP Summary Plot anzeigen (Übersicht der Feature-Wichtigkeit
             plot_size=(6, 4),
         )
         fig = plt.gcf()
-        # Sicherheitshalber auch alle Achsenticks kleiner drehen (inkl. Colorbar)
         for ax in fig.axes:
             ax.tick_params(axis="both", labelsize=8)
         st.pyplot(fig, clear_figure=True)

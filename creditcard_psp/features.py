@@ -113,32 +113,3 @@ def compute_feature_cols(
     if "PSP" not in feats:
         feats.append("PSP")
     return target, feats
-
-
-# @app.command()
-# def main(
-#     input_path: Path = PROCESSED_DATA_DIR / "dataset.csv",
-#     output_path: Path = PROCESSED_DATA_DIR / "features.csv",
-#     # -----------------------------------------
-# ):
-#     # Load dataset
-#     df = pd.read_csv(input_path)
-
-#     # Build and apply pipeline
-#     preproc = make_preprocessor(
-#         categorical_cols=['PSP','card','country'],
-#         amount_col='amount',
-#         time_col='tmsp'
-#     )
-#     df_transformed = preproc.fit_transform(df)
-
-#     # Convert back to DataFrame with feature names
-#     columns = preproc.named_steps['preprocessor'].get_feature_names_out()
-#     df_out = pd.DataFrame(df_transformed, columns=columns, index=df.index)
-
-#     # Save
-#     df_out.to_csv(output_path, index=False)
-#     logger.success(f"Features saved to {output_path}")
-
-# if __name__ == "__main__":
-#     app()

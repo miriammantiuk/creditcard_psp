@@ -28,40 +28,20 @@ from sklearn.model_selection import train_test_split
 app = typer.Typer(add_completion=False)
 RNG = 42
 
-# --------- Paths (Config, with Fallback) ----------
+# Paths (Config, with Fallback)
 try:
-    from creditcard_psp.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, FIGURES_DIR
+    from creditcard_psp.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, FIGURES_DIR, DASHBOARD_DIR
 except Exception:
     RAW_DATA_DIR = Path("data/raw")
     PROCESSED_DATA_DIR = Path("data/processed")
     MODELS_DIR = Path("models")
     FIGURES_DIR = Path("figures")
+    DASHBOARD_DIR = Path("dashboard_data")
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+DASHBOARD_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============ Helper ============
-
-# def compute_feature_cols(df: pd.DataFrame, target_hint: str | None = None) -> Tuple[str, List[str]]:
-#     target = target_hint or ("transaction_success" if "transaction_success" in df.columns else "success")
-#     assert "PSP" in df.columns and target in df.columns, "DF muss 'PSP' und Target enthalten."
-#     drop = {
-#         target, "transaction_id", "tmsp", "tmsp_last",
-#         "fee_successful", "fee_not_successful",
-#         "success", "attempt_number",
-#         "weekday", "hour", "minute",
-#     }
-#     feats = [c for c in df.columns
-#              if (c not in drop)
-#              and (not c.startswith("fee_successful__"))
-#              and (not c.startswith("fee_not_successful__"))]
-#     if "PSP" not in feats:
-#         feats.append("PSP")
-#     return target, feats
-
-# def time_feat_transform(df):
-#     # erzeugt sin/cos aus 'tmsp' und entfernt Rohspalten
-#     return add_time_features(df, time_col="tmsp", drop_raw=True)
-
 
 def make_preprocessor_selector() -> ColumnTransformer:
     try:
@@ -71,11 +51,11 @@ def make_preprocessor_selector() -> ColumnTransformer:
 
     pre = ColumnTransformer(
         transformers=[
-            # alle numerischen Spalten (inkl. der sin/cos) -> Imputer + StandardScaler
+            # All numeric columns (including sin/cos) -> Imputer + StandardScaler
             ("num",
              Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler())]),
              selector(dtype_include=np.number)),
-            # alle string/category Spalten (PSP, card, country, …) -> Imputer + OHE
+            # All string/category columns (PSP, card, country, etc.) -> Imputer + OHE
             ("cat",
              Pipeline([("imp", SimpleImputer(strategy="constant", fill_value="missing")),
                        ("ohe", ohe)]),
@@ -141,7 +121,7 @@ def predict_p_mat(calib_model, X_df: pd.DataFrame, psps: List[str], psp_col="PSP
     n = len(X_df); k = len(psps)
     return proba_all.reshape(k, n).T  # (n, k)
 
-# ---------- Pretty mapping for feature names ----------
+# Pretty mapping for feature names
 def _to_display(n: str) -> str:
     # remove transformer prefixes
     if "__" in n:
@@ -152,50 +132,7 @@ def _to_display(n: str) -> str:
         n = f"{var}={val}"
     return n
 
-# def shap_summary_plot(pipe_fit, X_df: pd.DataFrame, model_name: str, out_path: Path,
-#                       random_state: int = RNG):
-#     """Speichert einen SHAP Summary Plot für ein bereits FITTES Pipeline-Modell (ohne Calibrator)."""
-#     pre = pipe_fit.named_steps["preprocessor"]
-#     core = pipe_fit.named_steps["classifier"]
-
-#     X_trans = pre.transform(X_df)
-#     try:
-#         feature_names = pre.get_feature_names_out()
-#     except Exception:
-#         feature_names = np.array([f"f_{i}" for i in range(X_trans.shape[1])])
-
-#     # hübsche Anzeige-Namen
-#     feature_names_disp = [_to_display(str(n)) for n in feature_names]
-
-#     try:
-#         if isinstance(core, (RandomForestClassifier, XGBClassifier)):
-#             explainer = shap.TreeExplainer(core)
-#             sv = explainer.shap_values(X_trans)
-#             if isinstance(sv, list):
-#                 sv = sv[1] if len(sv) > 1 else sv[0]
-#         elif isinstance(core, LogisticRegression):
-#             try:
-#                 explainer = shap.LinearExplainer(core, X_trans)
-#                 sv = explainer.shap_values(X_trans)
-#             except Exception:
-#                 explainer = shap.Explainer(lambda Z: core.predict_proba(Z)[:, 1], X_trans)
-#                 sv = explainer(X_trans).values
-#         else:
-#             print(f"[INFO] Kein Tree/Linear-Modell für {model_name}; SHAP wird übersprungen.")
-#             return
-
-#         shap.summary_plot(sv, X_trans, feature_names=feature_names_disp, show=False)
-#         plt.title(f"SHAP Summary – {model_name}")
-#         plt.tight_layout()
-#         plt.savefig(out_path)
-#         plt.close()
-#         print(f"SHAP gespeichert: {out_path}")
-#     except Exception as e:
-#         print(f"[WARN] SHAP für {model_name} übersprungen: {e}")
-
-# (Force-Plot & compute_policy bleiben unverändert; optional könntest du sie später parametrisieren.)
-
-def shap_summary_plot(pipe_fit, X_df, model_name, out_path, random_state=42):
+def shap_summary_plot(pipe_fit, X_df, model_name, out_path,max_bg=1000, random_state=42):
     """
     Save a SHAP summary plot for a fitted Pipeline (feat + preprocessor + classifier).
     Runs the feature step (time features) before the preprocessor to avoid missing columns.
@@ -216,7 +153,7 @@ def shap_summary_plot(pipe_fit, X_df, model_name, out_path, random_state=42):
     if not isinstance(pipe_fit, Pipeline):
         raise ValueError("pipe_fit must be a sklearn Pipeline")
 
-    # --- run feat + preprocessor exactly as in training (everything except the final classifier)
+    # run feat + preprocessor exactly as in training (everything except the final classifier)
     preproc_pipe = pipe_fit[:-1]
     X_trans = preproc_pipe.transform(X_df)
     if hasattr(X_trans, "toarray"):  # densify sparse matrices for SHAP if needed
@@ -232,120 +169,56 @@ def shap_summary_plot(pipe_fit, X_df, model_name, out_path, random_state=42):
 
     core = pipe_fit.named_steps["classifier"]
     # unwrap very light wrappers if present (optional)
-    core = getattr(core, "estimator", core)
-    core = getattr(core, "base_estimator", core)
+    if isinstance(core, CalibratedClassifierCV):
+        core = core.estimator  
 
-    # --- choose explainer
-    values = None
-    if isinstance(core, (RandomForestClassifier, GradientBoostingClassifier)) or (XGBClassifier and isinstance(core, XGBClassifier)):
-        sv = shap.TreeExplainer(core)(X_trans)
-        values = sv.values if hasattr(sv, "values") else sv
-    elif isinstance(core, LogisticRegression):
-        try:
-            expl = shap.LinearExplainer(core, X_trans)
-            sv = expl(X_trans)
-            values = sv.values if hasattr(sv, "values") else expl.shap_values(X_trans)
-        except Exception:
-            expl = shap.Explainer(lambda Z: core.predict_proba(Z)[:, 1], X_trans)
-            values = expl(X_trans).values
-    else:
+    # Background-Sample for SHAP
+    n = X_trans.shape[0]
+    rs = np.random.RandomState(random_state)
+    bg_idx = rs.choice(n, size=min(n, max_bg), replace=False)
+    background = X_trans[bg_idx]
+
+    # Calculate SHAP
+    def _to_2d(vals):
+        vals = np.asarray(vals)
+        if vals.ndim == 3:      # (n, d, C)
+            vals = vals[:, :, 1]
+        assert vals.ndim == 2   # (n, d)
+        return vals
+
+    try:
+        if isinstance(core, (RandomForestClassifier, GradientBoostingClassifier)) or (XGBClassifier and isinstance(core, XGBClassifier)):
+            expl = shap.TreeExplainer(
+                core, data=background, model_output="probability",
+                feature_perturbation="interventional"
+            )
+            sv = expl(X_trans, check_additivity=False)
+            vals = _to_2d(getattr(sv, "values", sv))
+        elif isinstance(core, LogisticRegression):
+            # Linear
+            try:
+                expl = shap.LinearExplainer(core, background)
+                vals = expl(X_trans).values
+            except Exception:
+                expl = shap.Explainer(lambda Z: core.predict_proba(Z)[:, 1], background)
+                vals = expl(X_trans).values
+            vals = _to_2d(vals)
+        else:
+            score_fn = (lambda Z: core.predict_proba(Z)[:, 1]) if hasattr(core, "predict_proba") else core.decision_function
+            expl = shap.PermutationExplainer(score_fn, background)
+            vals = _to_2d(expl(X_trans).values)
+    except Exception:
         score_fn = (lambda Z: core.predict_proba(Z)[:, 1]) if hasattr(core, "predict_proba") else core.decision_function
-        sv = shap.PermutationExplainer(score_fn, X_trans)(X_trans)
-        values = sv.values
+        vals = _to_2d(shap.Explainer(score_fn, background)(X_trans).values)
 
-    # --- plot & save
+    # Plot & save
     plt.figure()
-    shap.summary_plot(values, X_trans, feature_names=feature_names_disp, show=False)
+    shap.summary_plot(vals, X_trans, feature_names=feature_names_disp, plot_type="dot", show=False)
     plt.title(f"SHAP Summary – {model_name}")
     plt.tight_layout()
     plt.savefig(out_path, dpi=180)
     plt.close()
     print(f"SHAP gespeichert: {out_path}")
-
-
-# def shap_summary_plot(pipe_fit, X_df, model_name, out_path, random_state=42):
-#     """
-#     Compute and save a SHAP summary plot for a fitted Pipeline.
-
-#     Uses a model-specific explainer when possible (Linear/Tree), otherwise
-#     falls back to PermutationExplainer with an explicit RNG to avoid warnings.
-#     """
-#     import numpy as np
-#     import matplotlib.pyplot as plt
-#     import shap
-#     from sklearn.pipeline import Pipeline
-#     from sklearn.linear_model import LogisticRegression
-#     from sklearn.ensemble import RandomForestClassifier
-
-#     try:
-#         from xgboost import XGBClassifier
-#     except Exception:
-#         XGBClassifier = None
-
-#     if not isinstance(pipe_fit, Pipeline):
-#         raise ValueError("pipe_fit must be a sklearn Pipeline")
-
-#     # Transform like in training: feat + preprocessor
-#     preproc_pipe = pipe_fit[:-1]
-#     X_trans = preproc_pipe.transform(X_df)
-#     if hasattr(X_trans, "toarray"):  # densify if sparse
-#         X_trans = X_trans.toarray()
-
-#     pre = pipe_fit.named_steps["preprocessor"]
-#     try:
-#         feature_names = pre.get_feature_names_out()
-#     except Exception:
-#         feature_names = [f"f{i}" for i in range(X_trans.shape[1])]
-
-#     core = pipe_fit.named_steps["classifier"]
-
-#     # background/sample for SHAP to keep plots fast
-#     n = X_trans.shape[0]
-#     rng = np.random.default_rng(random_state)
-#     idx = rng.choice(n, size=min(3000, n), replace=False)
-#     X_bg = X_trans[idx]
-
-#     try:
-#         if isinstance(core, (RandomForestClassifier, XGBClassifier)):
-#             explainer = shap.TreeExplainer(core)
-#             sv = explainer.shap_values(X_trans)
-#             if isinstance(sv, list):
-#                 sv = sv[1] if len(sv) > 1 else sv[0]
-#         elif isinstance(core, LogisticRegression):
-#             try:
-#                 explainer = shap.LinearExplainer(core, X_trans)
-#                 sv = explainer.shap_values(X_trans)
-#             except Exception:
-#                 explainer = shap.Explainer(lambda Z: core.predict_proba(Z)[:, 1], X_trans)
-#                 sv = explainer(X_trans).values
-#         else:
-#             print(f"[INFO] Kein Tree/Linear-Modell für {model_name}; SHAP wird übersprungen.")
-#             return
-    
-#     # Choose the fastest explainer available
-#     explainer = None
-#     if isinstance(core, LogisticRegression):
-#         explainer = shap.LinearExplainer(core, X_bg)
-#         sv = explainer(X_bg)
-#     elif (XGBClassifier is not None and isinstance(core, XGBClassifier)) or isinstance(core, RandomForestClassifier):
-#         explainer = shap.TreeExplainer(core)
-#         sv = explainer(X_bg)
-#     else:
-#         # robust fallback, with explicit RNG (kills the FutureWarning)
-#         explainer = shap.PermutationExplainer(
-#             model=lambda X: core.predict_proba(X)[:, 1],
-#             data=X_bg,
-#             rng=rng
-#         )
-#         sv = explainer(X_bg)
-
-#     # Plot & save
-#     plt.figure()
-#     shap.summary_plot(sv.values, X_bg, feature_names=feature_names, show=False)
-#     plt.title(f"SHAP Summary – {model_name}")
-#     plt.tight_layout()
-#     plt.savefig(out_path, dpi=180)
-#     plt.close()
 
 
 def save_dashboard_artifacts(
@@ -364,18 +237,18 @@ def save_dashboard_artifacts(
     print(f"\n--- Speichere Artefakte für Dashboard im Ordner '{output_dir}' ---")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Modelle (joblib)
+    # 1) Models (joblib)
     joblib.dump(calibrated_model, output_dir / "psp_router_model.joblib")
     joblib.dump(raw_model,        output_dir / "model_raw.joblib")
 
     # 2) Test-Features (Parquet)
     X_te_df.to_parquet(output_dir / "X_te.parquet", index=True)
 
-    # 3) PSP-Liste
+    # 3) PSP-List
     with open(output_dir / "psps.json", "w", encoding="utf-8") as f:
         json.dump(psps_list, f)
 
-    # 4) P-Matrix + erwartete Kosten
+    # 4) P-Matrix + expexted Kosten
     P = predict_p_mat(calibrated_model, X_te_df[feature_cols], psps_list, "PSP")
     np.save(output_dir / "P_matrix.npy", P)
 
@@ -387,7 +260,7 @@ def save_dashboard_artifacts(
     # 5) Original-DF (Parquet)
     df_full.to_parquet(output_dir / "df.parquet", index=True)
 
-    # 6) Meta (Mapping) – fürs Dashboard
+    # 6) Meta (Mapping) – for Dashboard
     meta = {
         "feature_names_out": list(map(str, feature_names_out or [])),
         "feature_names_display": feature_names_display or [],
@@ -398,11 +271,6 @@ def save_dashboard_artifacts(
 
     print("Dashboard-Artefakte gespeichert.")
 
-# __all__ = [
-#     "load_fees", "make_preprocessor_selector", "get_models",
-#     "load_fees", "metrics", "plot_calibration", "predict_p_mat",
-#     "RAW_DATA_DIR", "PROCESSED_DATA_DIR", "MODELS_DIR", "FIGURES_DIR", "RNG", "shap_summary_plot"
-# ]
 
 # ===================== Training =====================
 
@@ -421,7 +289,7 @@ def train(
     """Trainiert, evaluiert und speichert die PSP-Routing-Modelle."""
     print("--- Starte Trainings-Pipeline ---")
 
-    # ---- Load df (Parquet bevorzugt, mit Fallback) ----
+    # Load df 
     try:
         if str(df_path).lower().endswith(".parquet"):
             df = pd.read_parquet(df_path)
@@ -453,31 +321,31 @@ def train(
     pre = make_preprocessor_selector()
     zoo = get_models()
 
-    # --- Train & Evaluate Loop ---
+    # Train & Evaluate Loop
     results_data = []
     trained_models = {}
     for name in models:
         print(f"\n--- Training Modell: {name} ---")
         base = zoo[name]
 
-        # Kalibriertes Modell
+        # Calibrierted model
         pipe = Pipeline([feat_step, ("preprocessor", pre), ("classifier", base)])
         clf = CalibratedClassifierCV(estimator=pipe, cv=cv, method=calib).fit(X_tr, y_tr)
 
-        # Metriken
+        # Metrics
         y_proba = clf.predict_proba(X_te)[:, 1]
         m = metrics(y_te, y_proba)
         results_data.append({"model": name, **m})
         plot_calibration(y_te, y_proba, FIGURES_DIR / f"calibration_{name}.png", f"Calibration - {name}")
 
-        # Unkalibriertes Modell (für SHAP)
+        # Uncalibrierted model (for SHAP)
         pipe_raw = Pipeline([feat_step, ("preprocessor", pre), ("classifier", base)]).fit(X_tr, y_tr)
         trained_models[name] = {"calibrated": clf, "raw": pipe_raw}
 
         if do_shap:
             shap_summary_plot(pipe_raw, X_te, name, FIGURES_DIR / f"shap_{name}.png")
 
-    # --- Bestes Modell wählen ---
+    # Choose best model
     summary_df = pd.DataFrame(results_data).sort_values(by=selection_metric)
     best_name = summary_df.iloc[0]["model"]
     best_model_calibrated = trained_models[best_name]["calibrated"]
@@ -486,12 +354,12 @@ def train(
     print(f"\n--- Bestes Modell (nach {selection_metric}): {best_name} ---")
     print(summary_df)
 
-    # ---------- Mapping/Display-Namen erzeugen ----------
+    # Generate Mapping/Display-Names
     pre_best = best_model_raw.named_steps["preprocessor"]
     try:
         feat_out = pre_best.get_feature_names_out()
     except Exception:
-        # Fallback, falls get_feature_names_out nicht verfügbar ist
+        # Fallback if get_feature_names_out is not available
         X_tmp = pre_best.transform(X_tr.iloc[:1])
         feat_out = np.array([f"f_{i}" for i in range(X_tmp.shape[1])])
 
@@ -499,7 +367,7 @@ def train(
     display_names = [_to_display(n) for n in feat_out]
     mapping = dict(zip(feat_out, display_names))
 
-    # --- Artefakte (Modelle/Meta) im MODELS_DIR speichern ---
+    # Save Artefacts
     summary_df.to_csv(MODELS_DIR / "summary_metrics.csv", index=False)
     joblib.dump(best_model_calibrated, MODELS_DIR / f"best_model_{best_name}.joblib")
     with open(MODELS_DIR / "meta.json", "w", encoding="utf-8") as f:
@@ -512,37 +380,37 @@ def train(
             "mapping": mapping
         }, f, indent=2)
 
-    # --- Dashboard-Artefakte ---
+    # Dashboard-Artefacts
     if dump_dashboard_artifacts:
         print("\n--- Speichere Artefakte für Dashboard ---")
-        DASHBOARD_DATA_DIR = Path("dashboard_data")
-        DASHBOARD_DATA_DIR.mkdir(exist_ok=True)
+#         DASHBOARD_DATA_DIR = Path("dashboard_data")
+#         DASHBOARD_DATA_DIR.mkdir(exist_ok=True)
 
-        # Modelle: joblib
-        joblib.dump(best_model_calibrated, DASHBOARD_DATA_DIR / "psp_router_model.joblib")
-        joblib.dump(best_model_raw,        DASHBOARD_DATA_DIR / "model_raw.joblib")
+        # Models: joblib
+        joblib.dump(best_model_calibrated, DASHBOARD_DIR / "psp_router_model.joblib")
+        joblib.dump(best_model_raw,        DASHBOARD_DIR / "model_raw.joblib")
 
         # Original-DF: Parquet
-        df.to_parquet(DASHBOARD_DATA_DIR / "df.parquet", index=True)
+        df.to_parquet(DASHBOARD_DIR / "df.parquet", index=True)
 
         # Test-Features: Parquet
-        X_te.to_parquet(DASHBOARD_DATA_DIR / "X_te.parquet", index=True)
+        X_te.to_parquet(DASHBOARD_DIR / "X_te.parquet", index=True)
 
         # PSPs
-        with open(DASHBOARD_DATA_DIR / "psps.json", 'w', encoding="utf-8") as f:
+        with open(DASHBOARD_DIR / "psps.json", 'w', encoding="utf-8") as f:
             json.dump(psps, f)
 
-        # Matrizen
+        # Matrices
         P = predict_p_mat(best_model_calibrated, X_te[feature_cols], psps, "PSP")
-        np.save(DASHBOARD_DATA_DIR / "P_matrix.npy", P)
+        np.save(DASHBOARD_DIR / "P_matrix.npy", P)
 
         fee_s = np.array([fees.get(p, {}).get("fee_successful", 0.0) for p in psps], dtype=float)
         fee_f = np.array([fees.get(p, {}).get("fee_not_successful", 0.0) for p in psps], dtype=float)
         exp_cost = P * fee_s + (1 - P) * fee_f
-        np.save(DASHBOARD_DATA_DIR / "exp_cost_matrix.npy", exp_cost)
+        np.save(DASHBOARD_DIR / "exp_cost_matrix.npy", exp_cost)
 
-        # Meta (Mapping) auch fürs Dashboard
-        with open(DASHBOARD_DATA_DIR / "meta.json", "w", encoding="utf-8") as f:
+        # Meta (mapping) for the dashboard
+        with open(DASHBOARD_DIR / "meta.json", "w", encoding="utf-8") as f:
             json.dump({
                 "feature_names_out": feat_out,
                 "feature_names_display": display_names,

@@ -9,7 +9,7 @@ import joblib
 
 # IMPORTANT: importing this ensures the saved pipeline step "feat"
 # (FunctionTransformer(time_feat_transform)) can be resolved when loading.
-from creditcard_psp.features import add_time_features  # noqa: F401
+from creditcard_psp.features import add_time_features  
 
 from creditcard_psp.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR
 
@@ -66,7 +66,6 @@ def load_best_model():
     )
 
 def time_feat_transform(df):
-    # erzeugt sin/cos aus 'tmsp' und entfernt Rohspalten
     return add_time_features(df, time_col="tmsp", drop_raw=True)
 
 def load_fees(fee_path: Path) -> dict[str, dict[str, float]]:
@@ -199,33 +198,6 @@ def predict(
             "transaction_id": tx_ids,
             "best_psp": df["PSP"].astype(str).values,
         })
-
-#         # Compact output: per-row selection + (optional) per-PSP details
-#         out = pd.DataFrame({
-#             "transaction_id": df.get("transaction_id", pd.Series(rows)).values,
-#             "psp_selected": best_psp,
-#             "p_selected": P[rows, best_idx],
-#             "exp_cost_selected": exp_cost[rows, best_idx],
-#             "score_selected": score[rows, best_idx],
-#         })
-#         # Add wide columns for diagnostics/BI
-#         for j, p in enumerate(psps):
-#             out[f"p__{p}"] = P[:, j]
-#             out[f"cost__{p}"] = exp_cost[:, j]
-
-#     else:
-#         # Simple mode: only score the PSP provided in the 'PSP' column
-#         if "PSP" not in df.columns:
-#             raise RuntimeError(
-#                 "Column 'PSP' is missing. For single-PSP scoring keep 'PSP' in the input "
-#                 "or use --all-psps."
-#             )
-#         proba = model.predict_proba(df)[:, 1]
-#         out = pd.DataFrame({
-#             "transaction_id": df.get("transaction_id", pd.Series(range(len(df)))).values,
-#             "PSP": df["PSP"].astype(str).values,
-#             "p": proba,
-#         })
 
     # 4) Save
     out_path.parent.mkdir(parents=True, exist_ok=True)

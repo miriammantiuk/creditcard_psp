@@ -1,5 +1,5 @@
 {
-  "best_model_name": "XGB",
+  "best_model_name": "RF",
   "feature_cols": [
     "tmsp",
     "country",
