@@ -98,7 +98,6 @@ score = P - alpha * expected_cost
 
 Install dev dependencies and run smoke tests:
 ```bash
-pip install -r requirements-dev.txt
 pytest -q
 ```
 
