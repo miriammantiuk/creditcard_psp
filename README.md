@@ -85,7 +85,7 @@ python -m creditcard_psp.modeling.predict --input data/sample_input.csv --out pr
 The model computes a cost-adjusted score per PSP:
 
 ```python
-score = P - alpha * expected_cost 
+score = P - alpha * exp_cost 
 ```
 
 - `alpha ∈ [0,1]` controls the weight between cost vs. success.
